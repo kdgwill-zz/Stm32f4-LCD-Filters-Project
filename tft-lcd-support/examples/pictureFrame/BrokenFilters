@@ -1,0 +1,633 @@
+
+	void quasimondoBlur(const Point& origin) {
+
+		_gl->moveToPoint(origin);
+
+		int w = _gl->getWidth();
+		int h = _gl->getHeight();
+		int radius = 3;
+
+		if (radius < 1)
+			return;
+		int wm = w - 1;
+		int hm = h - 1;
+		int wh = w * h;
+		int div = radius + radius + 1;
+
+		prompt("ir");
+		unsigned char *r = new unsigned char[wh];
+		prompt("fr");
+		prompt("ig");
+		unsigned char *g = new unsigned char[wh];
+		prompt("fg");
+		prompt("ib");
+		unsigned char *b = new unsigned char[wh];
+		prompt("fb");
+		int rsum, gsum, bsum, x, y, i, p, p1, p2, yp, yi, yw;
+		int *vMIN = new int[std::max(w, h)];
+		int *vMAX = new int[std::max(w, h)];
+		unsigned char *dv = new unsigned char[256 * div];
+		uint8_t r1, r2, g1, g2, b1, b2;
+		UnpackedColour colour;
+		prompt("BEGIN");
+		for (i = 0; i < 256 * div; i++) {
+			dv[i] = (i / div);
+		}
+		prompt("part 1 COMPLETED");
+		yw = yi = 0;
+
+		for (y = 0; y < h; y++) {
+			rsum = gsum = bsum = 0;
+			for (i = -radius; i <= radius; i++) {
+				p = (yi + std::min(wm, std::max(i, 0))) * 3;
+				moveTo1D(p);
+				colour.packed565 = _accessMode->readData();
+				r1 = (colour.packed565 >> (11)) & 0x1F;
+				g1 = (colour.packed565 >> 5) & 0x3F;
+				b1 = colour.packed565 & 0x1F;
+
+				rsum += r1;
+				gsum += g1;
+				bsum += b1;
+
+			}
+			for (x = 0; x < w; x++) {
+
+				r[yi] = dv[rsum];
+				g[yi] = dv[gsum];
+				b[yi] = dv[bsum];
+
+				if (y == 0) {
+					vMIN[x] = std::min(x + radius + 1, wm);
+					vMAX[x] = std::max(x - radius, 0);
+				}
+				p1 = (yw + vMIN[x]) * 3;
+				p2 = (yw + vMAX[x]) * 3;
+				moveTo1D(p1);
+				colour.packed565 = _accessMode->readData();
+				r1 = (colour.packed565 >> (11)) & 0x1F;
+				g1 = (colour.packed565 >> 5) & 0x3F;
+				b1 = colour.packed565 & 0x1F;
+				moveTo1D(p2);
+				colour.packed565 = _accessMode->readData();
+				r2 = (colour.packed565 >> (11)) & 0x1F;
+				g2 = (colour.packed565 >> 5) & 0x3F;
+				b2 = colour.packed565 & 0x1F;
+
+				rsum += r1 - r2;
+				gsum += g1 - g2;
+				bsum += b1 - b2;
+
+				yi++;
+			}
+			yw += w;
+		}
+		prompt("part 2 COMPLETED");
+		for (x = 0; x < w; x++) {
+			rsum = gsum = bsum = 0;
+			yp = -radius * w;
+			for (i = -radius; i <= radius; i++) {
+				yi = std::max(0, yp) + x;
+				rsum += r[yi];
+				gsum += g[yi];
+				bsum += b[yi];
+				yp += w;
+			}
+			yi = x;
+			for (y = 0; y < h; y++) {
+				moveTo1D(yi * 3);
+				_gl->unpackColour(dv[rsum] << 3, dv[gsum] << 2, dv[bsum] << 3,
+						colour);
+				_gl->writePixel(colour);
+
+				if (x == 0) {
+					vMIN[y] = std::min(y + radius + 1, hm) * w;
+					vMAX[y] = std::max(y - radius, 0) * w;
+				}
+				p1 = x + vMIN[y];
+				p2 = x + vMAX[y];
+
+				rsum += r[p1] - r[p2];
+				gsum += g[p1] - g[p2];
+				bsum += b[p1] - b[p2];
+
+				yi += w;
+			}
+		}
+		prompt("part 3 COMPLETED");
+
+		delete r;
+		delete g;
+		delete b;
+
+		delete vMIN;
+		delete vMAX;
+		delete dv;
+	}
+
+	void gaussianBlur(const Point& p) {
+		int mWidth = _gl->getWidth();
+		int mHeight = _gl->getHeight();
+		int radius = 3;
+
+		float sigma2 = radius * radius;
+		int size = 5;		//good approximation of filter
+
+		float sum = 0;
+
+		uint16_t *buffer;
+		UnpackedColour colour;
+		uint8_t Red = 0;
+		uint8_t Green = 0;
+		uint8_t Blue = 0;
+		// allocate space for even scan lines and odd scan lines
+		buffer = new uint16_t[_gl->getWidth()];
+
+		//blurs x components
+		for (uint16_t y = p.Y; y < _gl->getHeight(); y++) {
+
+			for (uint16_t x = p.X + 1; x < _gl->getWidth(); x++) {
+				//process a pixel
+				sum = 0;
+				Red = 0;
+				Green = 0;
+				Blue = 0;
+				//accumulate colors
+				//Move Cursor into position for proper reading
+				int i = std::max(0, x - size);
+				_gl->moveToPoint(Point(i, y));
+				_gl->beginWriting();
+				for (; i <= std::min(mWidth - 1, x + size); i++) {
+					float factor = exp(-(i - x) * (i - x) / (2 * sigma2));
+					sum += factor;
+					colour.packed565 = _accessMode->readData();
+					Red += (colour.packed565 >> (11)) & 0x1F;
+					Green += (colour.packed565 >> 5) & 0x3F;
+					Blue += colour.packed565 & 0x1F;
+				};
+				//copy a pixel
+				Red /= sum;
+				Green /= sum;
+				Blue /= sum;
+				_gl->unpackColour(Red << 3, Green << 2, Blue << 3, colour);
+				buffer[x] = colour.packed565;
+			}
+			//Need to move cursor back to begining of row for writing
+			// draw it
+			_gl->moveToPoint(Point(p.X, y));
+			_gl->beginWriting();
+			_gl->rawTransfer(buffer, _gl->getWidth());
+		}
+
+		//blurs x components
+		for (uint16_t y = p.Y; y < _gl->getHeight(); y++) {
+
+			for (uint16_t x = p.X + 1; x < _gl->getWidth(); x++) {
+				//process a pixel
+				sum = 0;
+				Red = 0;
+				Green = 0;
+				Blue = 0;
+				//accumulate colors
+				//Move Cursor into position for proper reading
+				int i = std::max(0, y - size);
+				_gl->moveToPoint(Point(x, i));
+				_gl->beginWriting();
+				for (; i <= std::min(mHeight - 1, y + size); i++) {
+					float factor = exp(-(i - y) * (i - y) / (2 * sigma2));
+					sum += factor;
+					colour.packed565 = _accessMode->readData();
+					Red += (colour.packed565 >> (11)) & 0x1F;
+					Green += (colour.packed565 >> 5) & 0x3F;
+					Blue += colour.packed565 & 0x1F;
+				};
+				//copy a pixel
+				Red /= sum;
+				Green /= sum;
+				Blue /= sum;
+				_gl->unpackColour(Red << 3, Green << 2, Blue << 3, colour);
+				buffer[x] = colour.packed565;
+			}
+			//Need to move cursor back to begining of row for writing
+			// draw it
+			_gl->moveToPoint(Point(p.X, y));
+			_gl->beginWriting();
+			_gl->rawTransfer(buffer, _gl->getWidth());
+		}
+
+		delete[] buffer;
+	}
+
+	void gaussBlur_1(const Point& p) {
+		_gl->moveToPoint(p);
+		int w = _gl->getWidth();
+		int h = _gl->getHeight();
+		int r = 2;
+		float pi = 3.14159265359;
+		UnpackedColour colour;
+		uint16_t * buffer = new uint16_t[_gl->getWidth()];
+		//DO a ceiling
+		int rs = (r * 2.57) + 1;//std::ceil((float) (r * 2.57));     // significant radius
+		//
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				//float valR = 0, valG = 0, valB = 0;
+				float val = 0;
+				float wsum = 0;
+
+				for (int iy = i - rs; iy < i + rs + 1; iy++) {
+					for (int ix = j - rs; ix < j + rs + 1; ix++) {
+						int x = std::min(w - 1, std::max(0, ix));
+						int y = std::min(h - 1, std::max(0, iy));
+						int dsq = (ix - j) * (ix - j) + (iy - i) * (iy - i);
+						int wght = exp(-dsq / (2 * r * r)) / (pi * 2 * r * r);
+						moveTo1D(y * w + x);
+						colour.packed565 = _accessMode->readData();
+//						uint8_t Red = (colour.packed565 >> (11)) & 0x1F;
+//						uint8_t Green = (colour.packed565 >> 5) & 0x3F;
+//						uint8_t Blue = colour.packed565 & 0x1F;
+//						valR += Red * wght;
+//						valG += Green * wght;
+//						valB += Blue * wght;
+						val += colour.packed565 * wght;
+						wsum += wght;
+					}
+				}
+
+//				uint8_t Red = valR / wsum;
+//				uint8_t Green = valG / wsum;
+//				uint8_t Blue = valB / wsum;
+//				_gl->unpackColour(Red << 3, Green << 2, Blue << 3, colour);
+				colour.packed565 = val / wsum;
+				buffer[i * w + j] = colour.packed565;
+			}
+			//Need to move cursor back to begining of row for writing
+			// draw it
+			_gl->moveToPoint(Point(p.X, i));
+			_gl->beginWriting();
+			_gl->rawTransfer(buffer, _gl->getWidth());
+		}
+		delete[] buffer;
+	}
+
+	void sobelEdgeDetection() {
+		//greyScale(Point(0, 0));
+		//UnpackedColour colour;
+
+		int GX[3][3];
+		int GY[3][3];
+		int sumX = 0;
+		int sumY = 0;
+		int SUM = 0;
+
+		// Masks //////////////////////////////////////
+		//X//
+		GX[0][0] = -1;
+		GX[0][1] = 0;
+		GX[0][2] = 1;
+		GX[1][0] = -2;
+		GX[1][1] = 0;
+		GX[1][2] = 2;
+		GX[2][0] = -1;
+		GX[2][1] = 0;
+		GX[2][2] = 1;
+		//Y//
+		GY[0][0] = 1;
+		GY[0][1] = 2;
+		GY[0][2] = 1;
+		GY[1][0] = 0;
+		GY[1][1] = 0;
+		GY[1][2] = 0;
+		GY[2][0] = -1;
+		GY[2][1] = -2;
+		GY[2][2] = -1;
+
+		for (int Y = 0; _gl->getHeight(); Y++) {
+			for (int X = 0; X < _gl->getWidth(); X++) {
+				sumX = 0;
+				sumY = 0;
+
+				if (Y == 0 || Y == _gl->getHeight() - 1)
+					SUM = 0;
+				else if (X == 0 || _gl->getWidth() - 1)
+					SUM = 0;
+				else {
+					for (int I = -1; I <= 1; I++) {
+						for (int J = -1; J <= 1; J++) {
+							int piX = J + X;
+							int piY = I + Y;
+
+							pixel16 pixel = getPixel(piX, piY);
+							int NC = (pixel.Red + pixel.Red + pixel.Red) / 3;
+
+							sumX = sumX + (NC) * GX[J + 1][I + 1];
+							sumY = sumY + (NC) * GY[J + 1][I + 1];
+						}
+					}
+					SUM = abs(sumX) + abs(sumY);
+				}
+				if (SUM > 255)
+					SUM = 255;
+				if (SUM < 0)
+					SUM = 0;
+				int newPixel = (255 - (unsigned char) (SUM));
+
+				pixel16 pix(newPixel, newPixel, newPixel);
+				setPixel(X, Y, packColour(pix, 2, 2, 2));
+			}
+		}
+	}
+
+	void edgeDetection(const Point & p) {
+		_gl->moveToPoint(p);
+		//greyScale(p);
+		const int MASK_N = 2;
+		const int MASK_X = 3;
+		const int MASK_Y = 3;
+		const double threshold = 90.0;
+		const int mask[MASK_N][MASK_X][MASK_Y] = { { { -1, -2, -1 },
+				{ 0, 0, 0 }, { 1, 2, 1 } }, { { -1, 0, 1 }, { -2, 0, 2 }, { -1,
+				0, 1 } } };
+
+		double Val[MASK_N] = { 0.0 };
+
+		UnpackedColour colour;
+
+		for (int y = 0; y < _gl->getHeight(); ++y) {
+			for (int x = 0; x < _gl->getWidth(); ++x) {
+				for (int i = 0; i < MASK_N; ++i) {
+					int adjustX = (MASK_X % 2) ? 1 : 0;
+					int adjustY = (MASK_Y % 2) ? 1 : 0;
+					int xBound = MASK_X / 2;
+					int yBound = MASK_Y / 2;
+
+					Val[i] = 0.0;
+					for (int v = -yBound; v < (yBound + adjustY); ++v) {
+						for (int u = -xBound; u < (xBound + adjustX); ++u) {
+							if ((x + u) >= 0 && (x + u) < _gl->getWidth()
+									&& (y + v) >= 0
+									&& (y + v) < _gl->getHeight()) {
+								pixel16 pix = getPixel(x + u, y + v);
+								Val[i] += colorToInt(pix)
+										* mask[i][u + xBound][v + yBound];
+							}
+						}
+					}
+				}
+
+				double Total = 0.0;
+				for (int i = 0; i < MASK_N; ++i) {
+					Total += Val[i] * Val[i];
+				}
+
+				Total = sqrt(Total);
+				moveTo2D(x, y);
+				if (Total - threshold >= 0) {
+					colour.packed565 = 0x0;
+					_gl->writePixel(colour);
+				} else {
+					colour.packed565 = 0xFFFF;
+					_gl->writePixel(colour);
+				}
+			}
+		}
+	}
+
+	void sobelEdgeDetection2() {
+		int GX[3][3];
+		int GY[3][3];
+
+		int sumX[3];
+		int sumY[3];
+		int SUM[3];
+		int piX = 0;
+		int piY = 0;
+		//uint8_t R, G, B = 0;
+		int I, J = 0;
+
+		//UnpackedColour pixVal;
+		uint16_t *buffer;
+		// allocate space for even scan lines and odd scan lines
+		buffer = new uint16_t[_gl->getWidth()];
+		//buffer for previous line
+		uint16_t *bufT;
+		// allocate space for even scan lines and odd scan lines
+		bufT = new uint16_t[_gl->getWidth()];
+
+		// Masks //////////////////////////////////////
+		//X//
+		GX[0][0] = -1;
+		GX[0][1] = 0;
+		GX[0][2] = 1;
+		GX[1][0] = -2;
+		GX[1][1] = 0;
+		GX[1][2] = 2;
+		GX[2][0] = -1;
+		GX[2][1] = 0;
+		GX[2][2] = 1;
+		//Y//
+		GY[0][0] = 1;
+		GY[0][1] = 2;
+		GY[0][2] = 1;
+		GY[1][0] = 0;
+		GY[1][1] = 0;
+		GY[1][2] = 0;
+		GY[2][0] = -1;
+		GY[2][1] = -2;
+		GY[2][2] = -1;
+
+		for (int Y = 0; Y < _gl->getHeight(); Y++) {
+			for (int X = 0; X < _gl->getWidth(); X++) {
+				sumX[0] = sumX[1] = sumX[2] = 0;
+				sumY[0] = sumY[1] = sumY[2] = 0;
+
+				if (Y == 0 || Y == _gl->getHeight() - 1) {
+					SUM[0] = SUM[1] = SUM[2] = 0;
+				} else if (X == 0 || X == _gl->getWidth() - 1) {
+					SUM[0] = SUM[1] = SUM[2] = 0;
+				} else {
+					for (I = -1; I <= 1; I++) {
+						for (J = -1; J <= 1; J++) {
+							piX = J + X;
+							piY = I + Y;
+
+							uint8_t Red;
+							uint8_t Green;
+							uint8_t Blue;
+							if (I != 1) {
+								pixel16 pix = getPixel(piX, piY);
+								Red = pix.Red;
+								Green = pix.Green;
+								Blue = pix.Blue;
+							} else {
+								Red = (bufT[X] >> (11)) & 0x1F;
+								Green = (bufT[X] >> 5) & 0x3F;
+								Blue = bufT[X] & 0x1F;
+							}
+							sumX[0] += (Red) * GX[J + 1][I + 1];
+							sumX[1] += (Green) * GX[J + 1][I + 1];
+							sumX[2] += (Blue) * GX[J + 1][I + 1];
+
+							sumY[0] += (Red) * GY[J + 1][I + 1];
+							sumY[1] += (Green) * GY[J + 1][I + 1];
+							sumY[2] += (Blue) * GY[J + 1][I + 1];
+						}
+					}
+
+					SUM[0] = abs(sumX[0]) + abs(sumY[0]);
+					SUM[1] = abs(sumX[1]) + abs(sumY[1]);
+					SUM[2] = abs(sumX[2]) + abs(sumY[2]);
+				}
+				if (SUM[0] > 255)
+					SUM[0] = 255;
+				if (SUM[0] < 0)
+					SUM[0] = 0;
+
+				if (SUM[1] > 255)
+					SUM[1] = 255;
+				if (SUM[1] < 0)
+					SUM[1] = 0;
+
+				if (SUM[2] > 255)
+					SUM[2] = 255;
+				if (SUM[2] < 0)
+					SUM[2] = 0;
+
+				int newPixel[3];
+				newPixel[0] = (255 - ((unsigned char) (SUM[0])));
+				newPixel[1] = (255 - ((unsigned char) (SUM[1])));
+				newPixel[2] = (255 - ((unsigned char) (SUM[2])));
+
+				pixel16 pix(newPixel[0], newPixel[1], newPixel[2]);
+				buffer[X] = packColour(pix).packed565;
+				bufT[X] = packColour(getPixel(X, Y)).packed565;
+			}
+			//Need to move cursor back
+			// draw it
+			this->paintRow(Point(0, Y), buffer, _gl->getWidth());
+		}
+		delete[] buffer;
+	}
+
+
+	// sobel map for the x axis
+	const double _SOBEL_Gx[3][3] = { { -1.0, +0.0, +1.0 }, { -2.0, +0.0, +2.0 },
+			{ -1.0, +0.0, +1.0 } };
+	// sobel map for the y axis
+	const double _SOBEL_Gy[3][3] = { { +1.0, +2.0, +1.0 }, { +0.0, +0.0, +0.0 },
+			{ -1.0, -2.0, -1.0 } };
+
+	double get_sobel_gradient(int width, int height, int x, int y) {
+		double sobel_gradient_x = 0, sobel_gradient_y = 0;
+		int mx = 0, my = 0, sx = 0, sy = 0;
+
+		for (mx = x; mx < x + 3; mx++) {
+			sy = 0;
+			for (my = y; my < y + 3; my++) {
+				if (mx < width && my < height) {
+					//int r, g, b, idx;
+					int idx = (mx + width * my) * 3;
+
+					pixel16 pixVal = this->getPixel(idx);
+
+					//r = pixVal.Red;
+					//g = pixVal.Green;
+					//b = pixVal.Blue;
+					UnpackedColour col = this->packColour(pixVal);
+					sobel_gradient_x += col.packed565 * _SOBEL_Gx[sx][sy];
+					sobel_gradient_y += col.packed565 * _SOBEL_Gy[sx][sy];
+				}
+				sy++;
+			}
+			sx++;
+		}
+
+		return abs(sobel_gradient_x) + abs(sobel_gradient_y);
+	}
+
+	void sobelEdgeDetection3() {
+		double threshold = 50000.0;
+		UnpackedColour colour;
+		for (int y = 0; y < _gl->getHeight(); y++) {
+			for (int x = 0; x < _gl->getWidth(); x++) {
+				if (get_sobel_gradient(_gl->getWidth(), _gl->getHeight(), x, y)
+						>= threshold) {
+					colour.packed565 = 0x0000;			//set white
+				} else {
+					colour.packed565 = 0xFFFF;			//set black
+				}
+				this->setPixel(x, y, colour);
+			}
+		}
+	}
+
+	/**
+	 * https://www.cl.cam.ac.uk/projects/raspberrypi/tutorials/image-processing/edge_detection.html
+	 * 1 Iterate over every pixel in the image
+	 * 2 Apply the x gradient kernel
+	 * 3 Apply the y gradient kernel
+	 * 4 Find the length of the gradient using pythagoras' theorem
+	 * 5 Normalise the gradient length to the range 0-255
+	 * 6 Set the pixels to the new values
+	 */
+	void sobelEdgeDetection4() {
+		//UnpackedColour colour;
+		for (int x = 1; x < _gl->getWidth() - 1; x++) {
+			for (int y = 1; y < _gl->getHeight() - 1; y++) {
+				// initialise Gx and Gy to 0
+				int Gx = 0;
+				int Gy = 0;
+				unsigned int intensity = 0;
+
+				// Left column
+				pixel16 pixel = this->getPixel(x - 1, y - 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += -intensity;
+				Gy += -intensity;
+
+				pixel = this->getPixel(x - 1, y);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += -2 * intensity;
+
+				pixel = this->getPixel(x - 1, y + 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += -intensity;
+				Gy += +intensity;
+
+				// middle column
+				pixel = this->getPixel(x, y - 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gy += -2 * intensity;
+
+				pixel = this->getPixel(x, y + 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gy += +2 * intensity;
+
+				// right column
+				pixel = this->getPixel(x + 1, y - 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += +intensity;
+				Gy += -intensity;
+
+				pixel = this->getPixel(x + 1, y);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += +2 * intensity;
+
+				pixel = this->getPixel(x + 1, y + 1);
+				intensity = pixel.Red + pixel.Green + pixel.Blue;
+				Gx += +intensity;
+				Gy += +intensity;
+
+				// calculate the gradient length
+				unsigned int length = (unsigned int) sqrt(
+						(float) (Gx * Gx) + (float) (Gy * Gy));
+
+				// normalise the length to 0 to 255
+				length = length / 17;
+
+				// draw the pixel on the edge image
+				pixel16 pixel2(length,length,length);
+				this->setPixel(x, y, pixel2);
+			}
+		}
+	}

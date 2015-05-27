@@ -1,0 +1,56 @@
+# scons
+
+.sconsign.dblite
+lib/build/
+examples/*/build/
+site_scons/*.pyc
+
+# compiler output
+
+*.o
+*.a
+
+# eclipse settings
+
+lib/.settings/
+examples/.settings/
+
+# eclipse output
+
+lib/Debug_*/
+examples/*/Debug_*/
+
+# release builder output
+
+dist/
+
+# OS junk files
+
+[Tt]humbs.db
+
+# Visual Studio files
+
+*.[Oo]bj
+*.user
+*.aps
+*.pch
+*.vspscc
+*.vssscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.[Cc]ache
+*.ilk
+*.log
+*.lib
+*.sbr
+*.sdf
+*.opensdf
+ipch/
+obj/
+Debug_*/
+Release_*/

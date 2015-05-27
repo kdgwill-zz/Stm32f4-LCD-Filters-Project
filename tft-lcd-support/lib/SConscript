@@ -1,0 +1,71 @@
+#
+# SConscript build file for stm32plus. Called automatically by the SConstruct
+# in the parent directory
+#
+
+import os
+import InstallFiles
+
+# import everything exported in SConstruct
+
+Import('*')
+
+# we'll need this to find source files in a variant_dir environment
+
+def RecursiveGlob(directory,patterns):
+
+  node=Dir(directory)
+  build_dir=node.abspath
+
+  while node!=node.srcnode():
+    node=node.srcnode()
+
+  result=[]
+  for root,dirs,files in os.walk(node.abspath):
+
+    # get the full pathname of this directory and the optional compat file
+
+    compatFile=os.path.join(root,"compat.txt")
+    supported=True
+
+    # presence of compat file indicates that the sources in this directory have MCU
+    # compatibility restrictions. subdirectories must also have a compat.txt file. 
+
+    if os.path.exists(compatFile):
+      supported=False
+      for line in open(compatFile,"r"):
+        line=line.rstrip()
+        if not line.startswith("#") and line==mcu:
+          supported=True
+          break
+
+    if supported:
+      for pattern in patterns:
+        result+=Glob(os.path.join(root.replace(node.abspath,build_dir),pattern))
+
+  return result
+
+# get all the stm32plus library sources
+
+matches=[]
+matches.append(RecursiveGlob("src", ("*.c", "*.cpp", "*.asm")))
+matches.append(RecursiveGlob("fwlib", ("*.c", "*.cpp", "*.asm")))
+matches.append(RecursiveGlob("usblib", ("*.c", "*.cpp", "*.asm")))
+
+# trigger a build with the correct library name
+
+libstm32plus=env.Library("stm32plus"+"-"+systemprefix+".a",matches)
+
+# install the library if the user gave the install option
+
+env.Install(INSTALLDIR+"/lib/"+INSTALLDIR_PREFIX,libstm32plus)
+env.Alias("install",INSTALLDIR)
+
+# install headers
+
+InstallFiles.InstallExclude(env,"*.c","*.o","*.xml","*.csv","*.xlsx")
+InstallFiles.InstallFiles(env,INSTALLDIR+"/include/"+INSTALLDIR_PREFIX,"#lib/include")
+InstallFiles.InstallFiles(env,INSTALLDIR+"/include/"+INSTALLDIR_PREFIX+"/fwlib","#lib/fwlib",glob="*.h")
+InstallFiles.InstallFiles(env,INSTALLDIR+"/include/"+INSTALLDIR_PREFIX+"/usblib","#lib/usblib",glob="*.h")
+
+Return("libstm32plus")
